@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -90,8 +92,9 @@ class CodexAppServerClient:
             if self._process and self._process.returncode is None:
                 return
 
+            codex_bin = _resolve_executable(self._settings.codex_bin)
             self._process = await asyncio.create_subprocess_exec(
-                self._settings.codex_bin,
+                codex_bin,
                 "app-server",
                 "--listen",
                 "stdio://",
@@ -206,3 +209,33 @@ def _sandbox_policy(mode: str, cwd: Path) -> dict[str, Any]:
         "excludeTmpdirEnvVar": False,
         "excludeSlashTmp": False,
     }
+
+
+def _resolve_executable(command: str) -> str:
+    path = shutil.which(command)
+    if path:
+        return path
+
+    if os.name == "nt":
+        candidates = []
+        if not command.lower().endswith((".exe", ".cmd", ".bat")):
+            candidates.extend([f"{command}.cmd", f"{command}.exe", f"{command}.bat"])
+        candidates.extend(
+            [
+                str(Path.home() / "AppData" / "Roaming" / "npm" / f"{command}.cmd"),
+                str(Path.home() / "AppData" / "Roaming" / "npm" / f"{command}.exe"),
+            ]
+        )
+        for candidate in candidates:
+            resolved = shutil.which(candidate)
+            if resolved:
+                return resolved
+            if Path(candidate).exists():
+                return candidate
+
+    raise FileNotFoundError(
+        f"Cannot find Codex executable: {command!r}. "
+        "Set CODEX_BIN to the full path, for example "
+        r"CODEX_BIN=C:\Users\<you>\AppData\Roaming\npm\codex.cmd, "
+        "or make sure `codex --version` works in the same terminal that starts this bridge."
+    )

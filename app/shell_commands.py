@@ -28,6 +28,9 @@ class ShellCommandHandler:
         
 
     async def handle(self, session_id: str, command: str) -> ShellResult:
+        if command.startswith("/cmd"):
+            return await self._cmd(session_id, command.removeprefix("/cmd").strip())
+
         try:
             parts = shlex.split(command)
         except ValueError as exc:
@@ -143,6 +146,40 @@ class ShellCommandHandler:
 
         status = "success" if process.returncode == 0 else "failed"
         return ShellResult(True, f"Shell {name}", output or "(empty)", status)
+
+    async def _cmd(self, session_id: str, command: str) -> ShellResult:
+        if not command:
+            return ShellResult(True, "Shell cmd", "Usage: /cmd <command>", "failed")
+
+        cwd = self._cwd(session_id)
+        if not self._is_allowed(cwd):
+            return ShellResult(True, "Shell cmd", f"Path is outside allowed repos: {cwd}", "failed")
+
+        if self._is_windows:
+            args = ["cmd", "/c", command]
+        else:
+            args = ["/bin/sh", "-lc", command]
+
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=str(cwd),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            output_bytes, _ = await asyncio.wait_for(process.communicate(), timeout=120)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.wait()
+            return ShellResult(True, "Shell cmd", "Command timed out after 120 seconds.", "failed")
+
+        output = output_bytes.decode("utf-8", errors="replace").strip()
+        if len(output) > 12000:
+            output = "... output truncated ...\n" + output[-12000:]
+
+        body = f"$ {command}\n\n{output or '(empty)'}\n\nexit_code: {process.returncode}"
+        status = "success" if process.returncode == 0 else "failed"
+        return ShellResult(True, "Shell cmd", body, status)
 
     def _resolve(self, session_id: str, raw_path: str) -> Path:
         raw_path = self._normalize_windows_path(raw_path) if self._is_windows else raw_path

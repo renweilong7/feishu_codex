@@ -141,6 +141,15 @@ cd feishu_codex
 
 These commands are restricted to directories under `CODEX_REPOS`.
 
+Run an explicit shell command in the current session directory:
+
+```text
+/cmd git pull
+/cmd git status
+```
+
+`/cmd` uses the directory shown by `pwd`. On Windows it runs through `cmd /c`; on macOS/Linux it runs through `/bin/sh -lc`.
+
 After `cd`, Codex also runs in the current session directory:
 
 ```text
@@ -171,6 +180,18 @@ For Windows, expose drive roots or project roots through `CODEX_REPOS`, for exam
 ```env
 CODEX_REPOS=c=C:\,d=D:\,project=C:\work\project
 DEFAULT_REPO=project
+```
+
+If Windows cannot find Codex, set `CODEX_BIN` to the full `.cmd` path:
+
+```env
+CODEX_BIN=C:\Users\<you>\AppData\Roaming\npm\codex.cmd
+```
+
+The same terminal that starts this bridge should also be able to run:
+
+```bat
+codex --version
 ```
 
 Cancel a running task:
